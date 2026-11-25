@@ -1,0 +1,43 @@
+name: CI Verify (jeandle-llvm)
+
+on:
+  push:
+    branches: ["ci/gha-verify"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - name: Clone upstream source
+        run: git clone --depth=1 --branch main https://github.com/jeandle/jeandle-llvm.git source
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build build-essential zlib1g-dev libzstd-dev
+      - name: Configure LLVM (X86 + clang)
+        working-directory: source
+        run: |
+          cmake -S llvm -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_TARGETS_TO_BUILD=X86 \
+            -DLLVM_ENABLE_PROJECTS=clang \
+            -DLLVM_ENABLE_ASSERTIONS=OFF \
+            -DLLVM_BUILD_LLVM_DYLIB=ON \
+            -DLLVM_DYLIB_COMPONENTS=all
+      - name: Build clang / llc / opt / llvm-config
+        working-directory: source
+        run: cmake --build build -j 4 --target clang llc opt llvm-config
+      - name: Smoke test
+        working-directory: source
+        run: |
+          ls -lh build/bin/clang build/bin/llc build/bin/opt build/bin/llvm-config
+          build/bin/llc --version | head -3
